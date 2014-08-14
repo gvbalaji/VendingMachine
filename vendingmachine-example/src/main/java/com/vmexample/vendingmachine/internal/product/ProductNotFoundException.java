@@ -1,5 +1,6 @@
 package com.vmexample.vendingmachine.internal.product;
 
+@SuppressWarnings("serial")
 public class ProductNotFoundException extends Exception {
 
 	public ProductNotFoundException() {

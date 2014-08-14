@@ -3,13 +3,17 @@ package com.vmexample.vendingmachine.internal.product.service;
 import java.util.List;
 import java.util.Set;
 
+import com.vmexample.vendingmachine.internal.product.NoProductsFoundException;
 import com.vmexample.vendingmachine.internal.product.Product;
 import com.vmexample.vendingmachine.internal.product.ProductCode;
 import com.vmexample.vendingmachine.internal.product.ProductNotFoundException;
+import com.vmexample.vendingmachine.internal.product.UnableToAddProductException;
 import com.vmexample.vendingmachine.internal.product.repository.ProductRepository;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
-
+@Service
 public class DefaultProductService implements ProductService {
 
 	final ProductRepository productRepository;
@@ -21,7 +25,7 @@ public class DefaultProductService implements ProductService {
 	}
 
 	@Override
-	public Set<Product> getAvailableProducts() {
+	public Set<Product> getAvailableProducts() throws NoProductsFoundException {
 		
 		return productRepository.getAvailableProducts();
 	}
@@ -45,15 +49,22 @@ public class DefaultProductService implements ProductService {
 	}
 
 	@Override
-	public void addProduct(Product product) {
+	public void addProduct(Product product) throws UnableToAddProductException{
 		productRepository.addProduct(product);
 
 	}
 
 	@Override
-	public void addProducts(List<Product> products) {
+	public void addProducts(List<Product> products) throws UnableToAddProductException {
 		productRepository.addProducts(products);
 
+	}
+
+	@Override
+	public Product getProduct(ProductCode productCode)
+			throws ProductNotFoundException {
+		// TODO Auto-generated method stub
+		return productRepository.getProduct(productCode);
 	}
 
 }
