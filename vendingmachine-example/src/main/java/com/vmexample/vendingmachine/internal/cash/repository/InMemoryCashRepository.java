@@ -5,9 +5,13 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.springframework.stereotype.Repository;
 
+import com.vmexample.vendingmachine.client.Messages;
 import com.vmexample.vendingmachine.internal.cash.CurrencyCode;
 import com.vmexample.vendingmachine.internal.cash.MoneyEntity;
 import com.vmexample.vendingmachine.internal.cash.NotEnoughMoneyLeftException;
@@ -17,16 +21,22 @@ import com.vmexample.vendingmachine.internal.cash.UnableToAddCashException;
 public class InMemoryCashRepository implements CashRepository {
 
 	private final Map<CurrencyCode, List<MoneyEntity>> cashMap;
+	private final ReadWriteLock  lock;
+	private final Lock readLock, writeLock;
 
 	
 	public InMemoryCashRepository() {
 		this.cashMap = new EnumMap<>(CurrencyCode.class);
+		lock = new ReentrantReadWriteLock();
+	    readLock = lock.readLock();
+	    writeLock = lock.writeLock();
 	}
 
 	@Override
-	public synchronized void depositCash(MoneyEntity money) throws UnableToAddCashException {
+	public  void depositCash(MoneyEntity money) throws UnableToAddCashException {
 		
 		try {
+			writeLock.lock();
 			List<MoneyEntity> moneyList = cashMap.get(money.getCurrencyCode());
 			if(moneyList != null){
 				moneyList.add(money);
@@ -37,24 +47,33 @@ public class InMemoryCashRepository implements CashRepository {
 				cashMap.put(money.getCurrencyCode(), moneyList);
 			}
 		} catch (Exception e) {
-				throw new UnableToAddCashException(e);
+				throw new UnableToAddCashException(Messages.getString(Messages.UNABLE_TO_DEPOSIT_CASH), e); //$NON-NLS-1$
+		}
+		finally {
+			writeLock.unlock();
 		}
 
 	}
 
 	@Override
-	public synchronized void depositCash(List<MoneyEntity> moneyList) throws UnableToAddCashException {
+	public  void depositCash(List<MoneyEntity> moneyList) throws UnableToAddCashException {
 		
 		List<MoneyEntity> addedMoneyList = new ArrayList<>();
 		try {
+			writeLock.lock();
 			for(MoneyEntity money : moneyList)
 			{
 				depositCash(money);
 				addedMoneyList.add(money);
 			}
 		} catch (Exception e) {
-			removeMoneyEntities(addedMoneyList);
 			throw new UnableToAddCashException(e);
+		}
+		finally {
+			
+			if(addedMoneyList.size() > 0)
+				removeMoneyEntities(addedMoneyList);
+			writeLock.unlock();
 		}
 
 	}
@@ -77,49 +96,74 @@ public class InMemoryCashRepository implements CashRepository {
 	}
 
 	@Override
-	public synchronized Integer getNumberOfCurrrencyEntities(CurrencyCode currencyCode) {
+	public  Integer getNumberOfCurrrencyEntities(CurrencyCode currencyCode) {
 		
 		int numberOfCurrencyEntities = 0;
-		List<MoneyEntity> moneyList = cashMap.get(currencyCode);
-		if(moneyList != null)
-			numberOfCurrencyEntities = moneyList.size();
-		return numberOfCurrencyEntities;
+		try {
+			readLock.lock();		
+			List<MoneyEntity> moneyList = cashMap.get(currencyCode);
+			if(moneyList != null)
+				numberOfCurrencyEntities = moneyList.size();
+		}
+		finally {
+			readLock.unlock();
+		}
+		return new Integer(numberOfCurrencyEntities);
 	}
 
 	@Override
-	public synchronized BigDecimal getTotalCurrencyValue(CurrencyCode currencyCode) {
+	public BigDecimal getTotalCurrencyValue(CurrencyCode currencyCode) {
 		
-		Integer numberOfEntities = getNumberOfCurrrencyEntities(currencyCode);
-		BigDecimal totalValue = new BigDecimal(currencyCode.value() * numberOfEntities);
-		return totalValue;
+		Integer numberOfEntities = 0;
+		try {
+			readLock.lock();	
+			numberOfEntities = getNumberOfCurrrencyEntities(currencyCode);
+		}
+		finally {
+			readLock.unlock();
+		}
+		return new BigDecimal(currencyCode.value() * numberOfEntities);
 	}
 
 	@Override
-	public synchronized MoneyEntity debitCash(CurrencyCode currencyCode) throws NotEnoughMoneyLeftException {
+	public  MoneyEntity debitCash(CurrencyCode currencyCode) throws NotEnoughMoneyLeftException {
 		
 		MoneyEntity money = null;
-		if(checkIfEnoughCurrencyExists(currencyCode, 0))
-			money = cashMap.get(currencyCode).remove(0);
+		try {
+			writeLock.lock();
+			if(checkIfEnoughCurrencyExists(currencyCode, 0))
+				money = cashMap.get(currencyCode).remove(0);
+		}
+		finally {
+			writeLock.unlock();
+		}		
 		return money;
 	}
 
 	@Override
-	public synchronized Map<CurrencyCode, List<MoneyEntity>> debitCash(
+	public  Map<CurrencyCode, List<MoneyEntity>> debitCash(
 			Map<CurrencyCode, Integer> cashRequestMap)  throws NotEnoughMoneyLeftException {
 		
-		/*
-		 * make Sure there is enough money first before taking anything
-		 */
-		checkIfEnoughCurrencyExists(cashRequestMap);
-		
-		/*
-		 * Now take all the money at once
-		 */
 		Map<CurrencyCode, List<MoneyEntity>> moneyMap= new EnumMap<>(CurrencyCode.class);
-		for(CurrencyCode currencyCode : cashRequestMap.keySet())
-		{
-			moneyMap.put(currencyCode, getCashList(currencyCode,cashRequestMap.get(currencyCode)));
+		try {
+			writeLock.lock();
+			/*
+			 * make Sure there is enough money first before taking anything
+			 */
+			checkIfEnoughCurrencyExists(cashRequestMap);
+			
+			/*
+			 * Now take all the money at once
+			 */
+			
+			for(CurrencyCode currencyCode : cashRequestMap.keySet())
+			{
+				moneyMap.put(currencyCode, getCashList(currencyCode,cashRequestMap.get(currencyCode)));
+			}
 		}
+		finally {
+			writeLock.unlock();
+		}		
 		
 		return moneyMap;
 	}
@@ -152,7 +196,7 @@ public class InMemoryCashRepository implements CashRepository {
 		boolean enoughCurrencyExists = false;
 		Integer numberOfEntities = getNumberOfCurrrencyEntities(currencyCode);
 		if(numberOfEntities < currencyCount)
-			throw new NotEnoughMoneyLeftException("Not Enough Money left");
+			throw new NotEnoughMoneyLeftException(Messages.getString(Messages.NOT_ENOUGH_MONEY_LEFT)); //$NON-NLS-1$
 		enoughCurrencyExists = true;
 		return enoughCurrencyExists;
 	}

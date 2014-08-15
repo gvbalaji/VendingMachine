@@ -6,9 +6,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.springframework.stereotype.Repository;
 
+import com.vmexample.vendingmachine.client.Messages;
 import com.vmexample.vendingmachine.internal.product.NoProductsFoundException;
 import com.vmexample.vendingmachine.internal.product.Product;
 import com.vmexample.vendingmachine.internal.product.ProductCode;
@@ -19,62 +23,102 @@ import com.vmexample.vendingmachine.internal.product.UnableToAddProductException
 public class InMemoryProductRepository implements ProductRepository {
 
 	private final Map<ProductCode, List<Product>> productMap;
+	private final ReadWriteLock  lock;
+	private final Lock readLock, writeLock;
 	
 	public InMemoryProductRepository() {
 		productMap = new EnumMap<>(ProductCode.class);
+		lock = new ReentrantReadWriteLock();
+	    readLock = lock.readLock();
+	    writeLock = lock.writeLock();		
 	}
 
-	public synchronized Set<Product> getAvailableProducts() throws NoProductsFoundException
+	public  Set<Product> getAvailableProducts() throws NoProductsFoundException
 	{
 		
 		Set<Product> productSet = new HashSet<>();
-		for(ProductCode productCode : productMap.keySet())
-		{
-			try {
-				productSet.add(getProduct(productCode));
+		try {
+			readLock.lock();
+			for (ProductCode productCode : productMap.keySet()) {
+				try {
+					productSet.add(getProduct(productCode));
+				} catch (Exception ex) {
+					//Do Nothing.
+				}
+
 			}
-			catch (Exception ex)
-			{
-				//Do Nothing.
-			}
-			
+			if (productSet.size() == 0)
+				throw new NoProductsFoundException(Messages.getString(Messages.NO_PRODUCT_FOUND)); //$NON-NLS-1$
+		} 
+		
+		finally {
+			readLock.unlock();
 		}
-		if(productSet.size() == 0)
-			throw new NoProductsFoundException("No products found");
 		return productSet;
 		
 	}
 
-	public synchronized Boolean checkIfProductAvailable(ProductCode productCode) {
+	public Boolean checkIfProductAvailable(ProductCode productCode) {
 		
-		return getProductCount(productCode) > 0 ? true : false;
+		Integer productCount = 0;
+	    try {
+	    	readLock.lock();
+	    	productCount = 	getProductCount(productCode);
+		}
+	    finally {
+	    	readLock.unlock();
+	    }
+		
+		return productCount > 0 ? true : false;
 	}
 
-	public synchronized Integer getProductCount(ProductCode productCode) {
+	public  Integer getProductCount(ProductCode productCode) {
 		int productCount = 0;
-		List<Product> productList = productMap.get(productCode);
-		if(productList != null)
-			productCount = productList.size();
+		try {
+			readLock.lock();
+			List<Product> productList = productMap.get(productCode);
+			if(productList != null)
+				productCount = productList.size();
+		}
+		finally {
+			readLock.unlock();
+		}
 		return productCount;
 	}
 
-	public synchronized Product buyProduct(ProductCode productCode) throws ProductNotFoundException {
-		List<Product> productList = productMap.get(productCode);
-		if(productList == null || productList.size() == 0)
-			throw new ProductNotFoundException();
-		return productList.remove(0);
+	public  Product buyProduct(ProductCode productCode) throws ProductNotFoundException {
+		Product product = null;
+		try {
+			writeLock.lock();
+			List<Product> productList = productMap.get(productCode);
+			if(productList == null || productList.size() == 0)
+				throw new ProductNotFoundException();
+			product = productList.remove(0);
+		}
+		finally {
+			writeLock.unlock();
+		}
+		return product;
 	}
 	
-	public synchronized Product getProduct(ProductCode productCode) throws ProductNotFoundException {
-		List<Product> productList = productMap.get(productCode);
-		if(productList == null || productList.size() == 0)
-			throw new ProductNotFoundException();
-		final Product product =  productList.get(0);
+	public  Product getProduct(ProductCode productCode) throws ProductNotFoundException {
+		Product product = null;
+		try {
+			readLock.lock();
+			List<Product> productList = productMap.get(productCode);
+			if(productList == null || productList.size() == 0)
+				throw new ProductNotFoundException();
+			product =  productList.get(0);
+		}
+		finally {
+			readLock.unlock();
+		}
 		return product;
 	}
 
-	public synchronized void addProduct(Product product)  throws UnableToAddProductException {
+	public  void addProduct(Product product)  throws UnableToAddProductException {
 		try {
+			writeLock.lock();
 			if(productMap.containsKey(product.getProductCode()))
 			{
 				productMap.get(product.getProductCode()).add(product);
@@ -87,24 +131,32 @@ public class InMemoryProductRepository implements ProductRepository {
 		}
 		catch (Exception ex)
 		{
-			throw new UnableToAddProductException(ex);
+			throw new UnableToAddProductException( Messages.getString(Messages.UNABLE_TO_ADD_PRODUCT), ex); //$NON-NLS-1$
+		}
+		finally {
+			writeLock.unlock();
 		}
 
 	}
 
 	@Override
-	public synchronized void addProducts(List<Product> products) throws UnableToAddProductException {
+	public  void addProducts(List<Product> products) throws UnableToAddProductException {
 		
 		List<Product> addedProducts = new ArrayList<>();
 		try {
+			writeLock.lock();
 			for(Product product : products)
 			{
 				addProduct(product);
 				addedProducts.add(product);
 			}
 		} catch (Exception e) {
-			removeProducts(addedProducts);
 			throw new UnableToAddProductException(e);
+		}
+		finally {
+			if(addedProducts.size() > 0)
+				removeProducts(addedProducts);
+			writeLock.unlock();
 		}
 		
 	}

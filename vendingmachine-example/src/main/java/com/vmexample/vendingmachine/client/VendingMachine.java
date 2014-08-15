@@ -56,7 +56,7 @@ public class VendingMachine {
 			try {
 				MoneyEntity money = new MoneyEntity(CurrencyCode.QUARTER);
 				vendingMachine.depositCash(money);
-				print(Messages.getString("VendingMachine.MoneyAdded")); //$NON-NLS-1$
+				print(Messages.getString(Messages.MONEY_ADDED)); //$NON-NLS-1$
 			} catch (UnableToAddCashException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -72,7 +72,7 @@ public class VendingMachine {
 		{
 				try {
 					vendingMachine.addProduct(product);
-					print(Messages.getString("VendingMachine.ProductAdded")); //$NON-NLS-1$
+					print(Messages.getString(Messages.PRODUCT_ADDED)); //$NON-NLS-1$
 				} catch (UnableToAddProductException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -91,13 +91,13 @@ public class VendingMachine {
 		
 		try {
 			VendingMachineOutput output = vendingMachine.buyProduct(ProductCode.COKE, cashMap);
-			print(Messages.getString("VendingMachine.ProductBought")); //$NON-NLS-1$
+			print(Messages.getString(Messages.VENDING_MACHINE_PRODUCT_BOUGHT)); //$NON-NLS-1$
 		    if(output != null)
 		    {
-		    	print(Messages.getString("VendingMachine.ProductTitle") + output.getProduct().getProductName()); //$NON-NLS-1$
+		    	print(Messages.getString(Messages.VENDING_MACHINE_PRODUCT_TITLE) + output.getProduct().getProductName()); //$NON-NLS-1$
 		    	for(CurrencyCode currencyCode: output.getCashChange().keySet())
 		    	{
-		    		print(Messages.getString("VendingMachine.ChangeTitle") + currencyCode.name() + Messages.getString("VendingMachine.MessageDelimitter") + output.getCashChange().get(currencyCode).size()); //$NON-NLS-1$ //$NON-NLS-2$
+		    		print(Messages.getString(Messages.VENDING_MACHINE_CHANGE_TITLE) + currencyCode.name() + Messages.getString(Messages.MESSAGE_DELIMITTER) + output.getCashChange().get(currencyCode).size()); //$NON-NLS-1$ //$NON-NLS-2$
 		    	}
 		    }
 		} catch (ProductNotFoundException e) {
@@ -110,9 +110,6 @@ public class VendingMachine {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
-		
-		
 	}
 	
 	private void print(String string) {
