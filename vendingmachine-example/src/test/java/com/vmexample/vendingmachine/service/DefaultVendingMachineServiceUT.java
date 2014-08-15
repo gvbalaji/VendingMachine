@@ -42,8 +42,8 @@ public class DefaultVendingMachineServiceUT {
 	public void productCanBeAdded() {
 		Product product = new Product(ProductCode.COKE,new Money(new BigDecimal(75),Currency.getInstance(Locale.getDefault())));
 		try {
-			doNothing().when(productService).addProduct(product);
 			defaultVendingMachineService.addProduct(product);
+			verify(productService, times(1)).addProduct(product);
 			
 		} catch (UnableToAddProductException e) {
 			fail("No exceptions should be thrown");
