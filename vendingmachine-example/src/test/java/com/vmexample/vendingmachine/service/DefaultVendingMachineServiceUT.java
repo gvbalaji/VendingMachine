@@ -65,9 +65,10 @@ public class DefaultVendingMachineServiceUT {
 	{
 		MoneyEntity money = new MoneyEntity(CurrencyCode.QUARTER);
 		try {
-			doNothing().when(cashService).depositCash(money);
+			//doNothing().when(cashService).depositCash(money);
 			defaultVendingMachineService.depositCash(money);
-			
+			verify(cashService,times(1)).depositCash(money);
+		
 		} catch (UnableToAddCashException e) {
 			fail("No exceptions should be thrown");
 		}
